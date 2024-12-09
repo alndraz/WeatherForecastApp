@@ -3,7 +3,7 @@ import requests
 import matplotlib.pyplot as plt
 
 app = Flask(__name__)
-API_KEY = 'NXW094u1iVpVAR2avrB63pFmqGqxXC2b'  # Замените на ваш реальный API-ключ
+API_KEY = '4NHH5MewX3ey6BIbA1RfEGHBWmNLKHZA'  # Замените на ваш реальный API-ключ
 
 
 def get_location_key(lat, lon):
@@ -22,8 +22,41 @@ def get_location_key(lat, lon):
         return None
 
 
+def check_bad_weather(temperature, wind_speed, precipitation_probability):
+    """
+    Определяет, является ли погода неблагоприятной.
+
+    Параметры:
+    - temperature (float): Температура в градусах Цельсия.
+    - wind_speed (float): Скорость ветра в км/ч.
+    - precipitation_probability (float): Вероятность осадков в %.
+
+    Возвращает:
+    - dict: Результат анализа погодных условий.
+    """
+    is_bad = False
+    reasons = []
+
+    if temperature < 0 or temperature > 35:
+        is_bad = True
+        reasons.append(f"Temperature is extreme ({temperature}°C)")
+
+    if wind_speed > 50:
+        is_bad = True
+        reasons.append(f"High wind speed ({wind_speed} km/h)")
+
+    if precipitation_probability > 70:
+        is_bad = True
+        reasons.append(f"High chance of precipitation ({precipitation_probability}%)")
+
+    return {
+        "is_bad_weather": is_bad,
+        "reasons": reasons if is_bad else ["Weather conditions are favorable"]
+    }
+
+
 def get_weather_data(lat, lon):
-    """Получение данных о погоде по координатам."""
+    """Получение данных о погоде и оценка неблагоприятных условий."""
     location_key = get_location_key(lat, lon)
     if not location_key:
         return {"error": "Failed to fetch location key"}
@@ -37,18 +70,25 @@ def get_weather_data(lat, lon):
     if response.status_code == 200:
         data = response.json()
         forecast = data['DailyForecasts'][0]
+
+        # Извлечение данных
+        temperature = {
+            'min': forecast['Temperature']['Minimum']['Value'],
+            'max': forecast['Temperature']['Maximum']['Value']
+        }
+        wind_speed = forecast.get('Day', {}).get('Wind', {}).get('Speed', {}).get('Value', 0)
+        precipitation_probability = forecast.get('Day', {}).get('PrecipitationProbability', 0)
+
+        # Оценка неблагоприятных условий
+        analysis = check_bad_weather(temperature['max'], wind_speed, precipitation_probability)
+
         return {
             'date': forecast['Date'],
-            'temperature': {
-                'min': forecast['Temperature']['Minimum']['Value'],
-                'max': forecast['Temperature']['Maximum']['Value']
-            },
-            'precipitation': {
-                'type': forecast['Day'].get('PrecipitationType', 'None'),
-                'intensity': forecast['Day'].get('PrecipitationIntensity', 'None'),
-                'has_precipitation': forecast['Day']['HasPrecipitation']
-            },
-            'conditions': forecast['Day']['IconPhrase']
+            'temperature': temperature,
+            'wind_speed': wind_speed,
+            'precipitation_probability': precipitation_probability,
+            'conditions': forecast['Day']['IconPhrase'],
+            'analysis': analysis
         }
     else:
         print(f"Failed to fetch weather data: {response.text}")
