@@ -13,12 +13,13 @@ def get_location_key(lat, lon):
         'apikey': API_KEY,
         'q': f"{lat},{lon}"
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
         data = response.json()
         return data.get('Key')  # Извлечение LocationKey
-    else:
-        print(f"Failed to fetch location key: {response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching location key: {e}")
         return None
 
 
@@ -56,7 +57,7 @@ def check_bad_weather(temperature, wind_speed, precipitation_probability):
 
 
 def get_weather_data(lat, lon):
-    """Получение данных о погоде и оценка неблагоприятных условий."""
+    """Получение данных о погоде и обработка ошибок API."""
     location_key = get_location_key(lat, lon)
     if not location_key:
         return {"error": "Failed to fetch location key"}
@@ -66,33 +67,38 @@ def get_weather_data(lat, lon):
         'apikey': API_KEY,
         'metric': True
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        forecast = data['DailyForecasts'][0]
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
 
-        # Извлечение данных
-        temperature = {
-            'min': forecast['Temperature']['Minimum']['Value'],
-            'max': forecast['Temperature']['Maximum']['Value']
-        }
-        wind_speed = forecast.get('Day', {}).get('Wind', {}).get('Speed', {}).get('Value', 0)
-        precipitation_probability = forecast.get('Day', {}).get('PrecipitationProbability', 0)
+        if response.status_code == 200:
+            data = response.json()
+            forecast = data['DailyForecasts'][0]
 
-        # Оценка неблагоприятных условий
-        analysis = check_bad_weather(temperature['max'], wind_speed, precipitation_probability)
+            # Извлечение данных
+            temperature = {
+                'min': forecast['Temperature']['Minimum']['Value'],
+                'max': forecast['Temperature']['Maximum']['Value']
+            }
+            wind_speed = forecast.get('Day', {}).get('Wind', {}).get('Speed', {}).get('Value', 0)
+            precipitation_probability = forecast.get('Day', {}).get('PrecipitationProbability', 0)
 
-        return {
-            'date': forecast['Date'],
-            'temperature': temperature,
-            'wind_speed': wind_speed,
-            'precipitation_probability': precipitation_probability,
-            'conditions': forecast['Day']['IconPhrase'],
-            'analysis': analysis
-        }
-    else:
-        print(f"Failed to fetch weather data: {response.text}")
-        return {"error": "Failed to fetch weather data"}
+            # Оценка неблагоприятных условий
+            analysis = check_bad_weather(temperature['max'], wind_speed, precipitation_probability)
+
+            return {
+                'date': forecast['Date'],
+                'temperature': temperature,
+                'wind_speed': wind_speed,
+                'precipitation_probability': precipitation_probability,
+                'conditions': forecast['Day']['IconPhrase'],
+                'analysis': analysis
+            }
+        else:
+            return {"error": f"API error: {response.status_code} - {response.text}"}
+
+    except requests.exceptions.RequestException as e:
+        return {"error": f"API connection failed: {e}"}
 
 
 @app.route('/')
@@ -104,38 +110,46 @@ def index():
 @app.route('/check_route', methods=['POST'])
 def check_route():
     """Обработка маршрута из формы."""
-    start = request.form.get('start')
-    end = request.form.get('end')
+    try:
+        start = request.form.get('start')
+        end = request.form.get('end')
 
-    # Пример сопоставления городов и координат
-    city_to_coordinates = {
-        "moscow": (55.856719, 37.608954),
-        "sochi": (43.582890, 39.730607)
-    }
-
-    start_coords = city_to_coordinates.get(start.lower())
-    end_coords = city_to_coordinates.get(end.lower())
-
-    if not start_coords or not end_coords:
-        return render_template("result.html", result="City not found or unsupported.")
-
-    # Получение данных о погоде
-    start_weather = get_weather_data(*start_coords)
-    end_weather = get_weather_data(*end_coords)
-
-    # Формирование результата
-    result = {
-        "start": {
-            "city": start.capitalize(),
-            "weather": start_weather
-        },
-        "end": {
-            "city": end.capitalize(),
-            "weather": end_weather
+        # Пример сопоставления городов и координат
+        city_to_coordinates = {
+            "moscow": (55.856719, 37.608954),
+            "sochi": (43.582890, 39.730607)
         }
-    }
 
-    return render_template("result.html", result=result)
+        start_coords = city_to_coordinates.get(start.lower())
+        end_coords = city_to_coordinates.get(end.lower())
+
+        if not start_coords or not end_coords:
+            return render_template("result.html", result="City not found or unsupported.")
+
+        # Получение данных о погоде
+        start_weather = get_weather_data(*start_coords)
+        end_weather = get_weather_data(*end_coords)
+
+        if "error" in start_weather or "error" in end_weather:
+            error_message = start_weather.get("error") or end_weather.get("error")
+            return render_template("result.html", result=f"Error fetching weather data: {error_message}")
+
+        # Формирование результата
+        result = {
+            "start": {
+                "city": start.capitalize(),
+                "weather": start_weather
+            },
+            "end": {
+                "city": end.capitalize(),
+                "weather": end_weather
+            }
+        }
+
+        return render_template("result.html", result=result)
+
+    except Exception as e:
+        return render_template("result.html", result=f"Unexpected error: {e}")
 
 
 @app.route('/weather', methods=['GET'])
