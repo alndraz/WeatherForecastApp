@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Result</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Weather Route Results</h1>
+    {% if result is string %}
+        <p>{{ result }}</p>
+    {% else %}
+        <h2>Start Point: {{ result.start.city }}</h2>
+        <p>Date: {{ result.start.weather.date }}</p>
+        <p>Max Temperature: {{ result.start.weather.temperature.max }}°C</p>
+        <p>Weather: {{ result.start.weather.conditions }}</p>
+        <p>Analysis: {{ result.start.weather.analysis.reasons[0] }}</p>
+
+        <h2>End Point: {{ result.end.city }}</h2>
+        <p>Date: {{ result.end.weather.date }}</p>
+        <p>Max Temperature: {{ result.end.weather.temperature.max }}°C</p>
+        <p>Weather: {{ result.end.weather.conditions }}</p>
+        <p>Analysis: {{ result.end.weather.analysis.reasons[0] }}</p>
+    {% endif %}
+    <a href="/">Go Back</a>
+</body>
+</html>

@@ -1,9 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import requests
 import matplotlib.pyplot as plt
 
 app = Flask(__name__)
-API_KEY = '4NHH5MewX3ey6BIbA1RfEGHBWmNLKHZA'  # Замените на ваш реальный API-ключ
+API_KEY = '4NHH5MewX3ey6BIbA1RfEGHBWmNLKHZA'
 
 
 def get_location_key(lat, lon):
@@ -95,6 +95,49 @@ def get_weather_data(lat, lon):
         return {"error": "Failed to fetch weather data"}
 
 
+@app.route('/')
+def index():
+    """Главная страница с формой для ввода маршрута."""
+    return render_template('index.html')
+
+
+@app.route('/check_route', methods=['POST'])
+def check_route():
+    """Обработка маршрута из формы."""
+    start = request.form.get('start')
+    end = request.form.get('end')
+
+    # Пример сопоставления городов и координат
+    city_to_coordinates = {
+        "moscow": (55.856719, 37.608954),
+        "sochi": (43.582890, 39.730607)
+    }
+
+    start_coords = city_to_coordinates.get(start.lower())
+    end_coords = city_to_coordinates.get(end.lower())
+
+    if not start_coords or not end_coords:
+        return render_template("result.html", result="City not found or unsupported.")
+
+    # Получение данных о погоде
+    start_weather = get_weather_data(*start_coords)
+    end_weather = get_weather_data(*end_coords)
+
+    # Формирование результата
+    result = {
+        "start": {
+            "city": start.capitalize(),
+            "weather": start_weather
+        },
+        "end": {
+            "city": end.capitalize(),
+            "weather": end_weather
+        }
+    }
+
+    return render_template("result.html", result=result)
+
+
 @app.route('/weather', methods=['GET'])
 def weather():
     """Эндпоинт для получения данных о погоде по одной точке."""
@@ -125,9 +168,7 @@ def route_weather():
             'weather': weather_data
         })
 
-    # Визуализация данных
     plot_weather(weather_reports)
-
     return jsonify(weather_reports)
 
 
